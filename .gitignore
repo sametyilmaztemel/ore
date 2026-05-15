@@ -1,0 +1,62 @@
+# Binaries
+bin/
+*.dSYM/
+orettyd
+signaling
+
+# Build caches
+.build/
+
+# IDE
+*.xcworkspace
+xcuserdata/
+*.xcuserdata
+*.xcodeproj
+project.pbxproj
+Pods/
+.DS_Store
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment
+.env
+!.env.example
+
+# iOS
+ios/*.xcworkspace
+ios/Pods/
+ios/*.xcarchive/
+ios/*.ipa/
+ios/Oretty.ipa/
+ios/exportOptions.plist
+
+# macOS build
+macOS/*.xcarchive/
+macOS/OreMenuBar.xcarchive/
+
+# Xcode DerivedData
+DerivedData/
+
+# Local config
+~/.oretty/
+
+# Local config
+~/.oretty/
+
+# Test output
+coverage.out
+*.test
+ios/*.xcarchive/
+ios/*.ipa/
+ios/exportOptions.plist
+macOS/*.xcarchive/
+ios/Oretty/WebRTC.framework.simulator_bak/
+*.ipa/
+*.xcarchive/
+orettyd_*
+wscheck*.go
+wstest.go
+wscheck.go
+macOS/OreMenuBar.xcarchive/
