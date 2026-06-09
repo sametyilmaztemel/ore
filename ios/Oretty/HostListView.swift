@@ -46,3 +46,99 @@ struct HostListView: View {
 
             // Bottom bar
             HStack {
+                Button(action: disconnect) {
+                    Label("Disconnect", systemImage: "power")
+                }
+                .foregroundColor(.red)
+                Spacer()
+                connectionStatus
+            }
+            .padding()
+            .background(Color(.systemGray6))
+        }
+        .onAppear(perform: refresh)
+    }
+
+    @ViewBuilder
+    private var connectionStatus: some View {
+        switch state.connectionPhase {
+        case .connected:
+            Label("Connected", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundColor(.green)
+        case .connecting, .registering, .pairing, .joiningRoom, .negotiating:
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.6)
+                Text("Connecting...")
+                    .font(.caption)
+            }
+        case .failed(let error):
+            Text(error)
+                .font(.caption)
+                .foregroundColor(.red)
+        case .disconnected:
+            Text("Disconnected")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func refresh() {
+        state.refreshHosts()
+    }
+
+    private func connectToHost(_ host: RemoteHostInfo) {
+        state.connectedHost = host.name ?? host.deviceID
+        state.connectToHost(host.deviceID)
+
+        // Wait for WebRTC connection then show screen
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            if state.webrtc.isConnected {
+                state.activeView = .screen
+            } else {
+                // Still negotiating, wait more
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    state.activeView = .screen
+                }
+            }
+        }
+    }
+
+    private func disconnect() {
+        state.disconnectAll()
+    }
+}
+
+struct HostListRow: View {
+    let host: RemoteHostInfo
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(host.online ? Color.green : Color.gray)
+                .frame(width: 10, height: 10)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(host.name ?? host.deviceID)
+                    .fontWeight(.semibold)
+                if let platform = host.platform {
+                    Text(platform)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .foregroundColor(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+#Preview {
+    HostListView()
+        .environmentObject(AppState())
+}
