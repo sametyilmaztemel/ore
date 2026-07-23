@@ -1,0 +1,30 @@
+name: Oretty
+options:
+  bundleIdPrefix: com.sametyilmaztemel
+  deploymentTarget:
+    iOS: "26.0"
+  xcodeVersion: "26.2"
+
+settings:
+  SWIFT_VERSION: "6.2"
+  MARKETING_VERSION: "1.0.0"
+  CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Oretty:
+    type: application
+    platform: iOS
+    sources:
+      - path: Oretty
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.sametyilmaztemel.ore
+      INFOPLIST_FILE: Oretty/Info.plist
+      DEVELOPMENT_TEAM: "MDTYNCFXMW"
+      CODE_SIGN_STYLE: Automatic
+      SWIFT_STRICT_CONCURRENCY: targeted
+    dependencies:
+      - framework: Oretty/WebRTC.framework
+        embed: true
+      - sdk: Network.framework
+      - sdk: AVFoundation.framework
+      - sdk: UIKit.framework
