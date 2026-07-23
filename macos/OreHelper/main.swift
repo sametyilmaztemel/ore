@@ -130,3 +130,267 @@ let keyMap: [Character: (code: UInt16, shift: Bool)] = {
         KeyEntry(char: "<", code: 0x2B, shift: true), KeyEntry(char: ">", code: 0x2F, shift: true),
         KeyEntry(char: "?", code: 0x2C, shift: true), KeyEntry(char: "~", code: 0x32, shift: true),
         KeyEntry(char: "|", code: 0x2A, shift: true),
+    ]
+    for e in entries {
+        map[e.char] = (e.code, e.shift)
+    }
+    return map
+}()
+
+func typeString(_ str: String) {
+    for ch in str {
+        guard let entry = keyMap[ch] else { continue }
+        
+        var flags: CGEventFlags = []
+        if entry.shift {
+            flags.insert(.maskShift)
+        }
+        
+        if let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: entry.code, keyDown: true) {
+            keyDown.flags = flags
+            keyDown.post(tap: .cghidEventTap)
+        }
+        
+        usleep(15000) // 15ms between keypresses
+        
+        if let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: entry.code, keyDown: false) {
+            keyUp.post(tap: .cghidEventTap)
+        }
+    }
+}
+
+func pressReturn() {
+    if let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true) {
+        keyDown.post(tap: .cghidEventTap)
+    }
+    usleep(50000)
+    if let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: false) {
+        keyUp.post(tap: .cghidEventTap)
+    }
+}
+
+func unlockScreen(password: String) -> Bool {
+    guard !password.isEmpty else { return false }
+    typeString(password)
+    usleep(100000)
+    pressReturn()
+    return true
+}
+
+func lockScreenNow() -> Bool {
+    let service = IOServiceGetMatchingService(kIOMainPortDefault,
+        IOServiceMatching("IODisplayWrangler"))
+    guard service != 0 else { return false }
+    
+    let ret = IORegistryEntrySetCFProperty(service, "IORequestIdle" as CFString, kCFBooleanTrue)
+    IOObjectRelease(service)
+    return ret == KERN_SUCCESS
+}
+
+// MARK: - Mouse Event Functions
+
+// FIX: Move mouse cursor to absolute coordinates
+func moveMouse(x: Int32, y: Int32) {
+    if let event = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: CGPoint(x: CGFloat(x), y: CGFloat(y)), mouseButton: .left) {
+        event.post(tap: .cghidEventTap)
+    }
+}
+
+// FIX: Click mouse button (button: 0=left, 1=right, 2=center)
+func clickMouse(button: Int32, down: Bool, x: Int32, y: Int32) {
+    let btn: CGMouseButton
+    let downType: CGEventType
+    let upType: CGEventType
+    switch button {
+    case 0:
+        btn = .left
+        downType = .leftMouseDown
+        upType = .leftMouseUp
+    case 1:
+        btn = .right
+        downType = .rightMouseDown
+        upType = .rightMouseUp
+    case 2:
+        btn = .center
+        downType = .otherMouseDown
+        upType = .otherMouseUp
+    default:
+        return
+    }
+    let type = down ? downType : upType
+    if let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGPoint(x: CGFloat(x), y: CGFloat(y)), mouseButton: btn) {
+        event.post(tap: .cghidEventTap)
+    }
+}
+
+// FIX: Scroll wheel event
+func scrollMouse(deltaX: Int32, deltaY: Int32) {
+    if let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: deltaY, wheel2: deltaX, wheel3: 0) {
+        event.post(tap: .cghidEventTap)
+    }
+}
+
+// FIX: Send key event with modifier flags support
+func sendKeyWithModifiers(keyCode: UInt16, down: Bool, flags: CGEventFlags) {
+    if let event = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: down) {
+        event.flags = flags
+        event.post(tap: .cghidEventTap)
+    }
+}
+
+// FIX: Parse modifier flags from comma-separated string (e.g. "cmd,shift,option")
+func parseModifierFlags(_ str: String) -> CGEventFlags {
+    var flags: CGEventFlags = []
+    let parts = str.split(separator: ",")
+    for part in parts {
+        switch part.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "cmd", "command":    flags.insert(.maskCommand)
+        case "opt", "option", "alt": flags.insert(.maskAlternate)
+        case "ctrl", "control":   flags.insert(.maskControl)
+        case "shift":             flags.insert(.maskShift)
+        case "fn", "function":    flags.insert(.maskSecondaryFn)
+        default: break
+        }
+    }
+    return flags
+}
+
+// FIX: Special key code constants for use with key_event command
+struct KeyCodes {
+    // Function keys
+    static let f1: UInt16 = 0x7A
+    static let f2: UInt16 = 0x78
+    static let f3: UInt16 = 0x63
+    static let f4: UInt16 = 0x76
+    static let f5: UInt16 = 0x60
+    static let f6: UInt16 = 0x61
+    static let f7: UInt16 = 0x62
+    static let f8: UInt16 = 0x64
+    static let f9: UInt16 = 0x65
+    static let f10: UInt16 = 0x6D
+    static let f11: UInt16 = 0x67
+    static let f12: UInt16 = 0x6F
+    // Arrow keys
+    static let upArrow: UInt16 = 0x7E
+    static let downArrow: UInt16 = 0x7D
+    static let leftArrow: UInt16 = 0x7B
+    static let rightArrow: UInt16 = 0x7C
+    // Special keys
+    static let escape: UInt16 = 0x35
+    static let tab: UInt16 = 0x30
+    static let delete: UInt16 = 0x33
+    static let home: UInt16 = 0x73
+    static let end: UInt16 = 0x77
+    static let pageUp: UInt16 = 0x74
+    static let pageDown: UInt16 = 0x79
+    static let `return`: UInt16 = 0x24
+    static let space: UInt16 = 0x31
+    // Additional keys
+    static let fn: UInt16 = 0x3F
+    static let backspace: UInt16 = 0x33 // Alias for delete
+    static let capsLock: UInt16 = 0x39
+}
+
+// MARK: - Main
+
+func main() -> Int32 {
+    let args = CommandLine.arguments
+    
+    if args.count < 2 {
+        print("{\"error\":\"no command\", \"version\":\"\(kVersion)\"}")
+        return 1
+    }
+    
+    let command = args[1]
+    
+    switch command {
+    case "check":
+        let loginPID = getLoginWindowPID()
+        let locked = isScreenLocked()
+        print("{\"locked\":\(locked),\"login_pid\":\(loginPID)}")
+        return 0
+        
+    case "capture":
+        guard let jpegData = captureDisplay() else {
+            fputs("{\"error\":\"capture failed\"}\n", stderr)
+            return 1
+        }
+        FileHandle.standardOutput.write(jpegData)
+        return 0
+        
+    case "unlock":
+        guard args.count >= 3 else {
+            fputs("{\"error\":\"password required\"}\n", stderr)
+            return 1
+        }
+        let success = unlockScreen(password: args[2])
+        print("{\"success\":\(success)}")
+        return success ? 0 : 1
+        
+    case "lock":
+        let success = lockScreenNow()
+        print("{\"success\":\(success)}")
+        return success ? 0 : 1
+        
+    case "install-check":
+        print("{\"uid\":\(getuid()),\"euid\":\(geteuid()),\"is_root\":\(geteuid() == 0),\"version\":\"\(kVersion)\"}")
+        return 0
+
+    // FIX: Mouse move command
+    case "mouse_move":
+        guard args.count >= 4,
+              let x = Int32(args[2]),
+              let y = Int32(args[3]) else {
+            fputs("{\"error\":\"usage: mouse_move <x> <y>\"}\n", stderr)
+            return 1
+        }
+        moveMouse(x: x, y: y)
+        print("{\"success\":true}")
+        return 0
+
+    // FIX: Mouse click command
+    case "mouse_click":
+        guard args.count >= 6,
+              let btn = Int32(args[2]),
+              let x = Int32(args[4]),
+              let y = Int32(args[5]) else {
+            fputs("{\"error\":\"usage: mouse_click <button> <0|1> <x> <y>\"}\n", stderr)
+            return 1
+        }
+        let down = args[3] == "1"
+        clickMouse(button: btn, down: down, x: x, y: y)
+        print("{\"success\":true}")
+        return 0
+
+    // FIX: Mouse scroll command
+    case "mouse_scroll":
+        guard args.count >= 4,
+              let dx = Int32(args[2]),
+              let dy = Int32(args[3]) else {
+            fputs("{\"error\":\"usage: mouse_scroll <deltaX> <deltaY>\"}\n", stderr)
+            return 1
+        }
+        scrollMouse(deltaX: dx, deltaY: dy)
+        print("{\"success\":true}")
+        return 0
+
+    // FIX: Key event command with optional modifier flags
+    case "key_event":
+        guard args.count >= 4,
+              let keyCode = UInt16(args[2]) else {
+            fputs("{\"error\":\"usage: key_event <keyCode> <0|1> [modifiers...]\"}\n", stderr)
+            return 1
+        }
+        let down = args[3] == "1"
+        let flags: CGEventFlags = args.count > 4 ? parseModifierFlags(args[4]) : []
+        sendKeyWithModifiers(keyCode: keyCode, down: down, flags: flags)
+        print("{\"success\":true}")
+        return 0
+
+    default:
+        fputs("{\"error\":\"unknown command: \(command)\"}\n", stderr)
+        return 1
+    }
+}
+
+exit(main())
