@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.sametyilmaztemel.ore.helper</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>OreHelper</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleExecutable</key>
+    <string>OreHelper</string>
+    <key>CFBundlePackageType</key>
+    <string>BNDL</string>
+    <!-- SMJobBless authorization -->
+    <key>SMAuthorizedClients</key>
+    <array>
+        <string>anchor apple generic and identifier "com.sametyilmaztemel.ore.menubar" and (certificate leaf[field.1.2.840.113635.100.6.1.9] /* exists */ or certificate leaf[field.1.2.840.113635.100.6.1.8] /* exists */)</string>
+    </array>
+</dict>
+</plist>
