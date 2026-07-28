@@ -127,3 +127,261 @@ public class HelperManager: ObservableObject {
             }
             lastError = "OreHelper source (main.swift) not found in app bundle or development path"
             return false
+        }
+        return await compileHelper(from: sourcePath)
+    }
+
+    /// Internal: run swiftc to compile the helper binary.
+    private func compileHelper(from sourcePath: String) async -> Bool {
+        let outputPath = Bundle.main.bundlePath + "/Contents/Resources/OreHelper"
+        let outputDir = (outputPath as NSString).deletingLastPathComponent
+
+        do {
+            try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
+        } catch {
+            lastError = "Failed to create Resources directory: \(error.localizedDescription)"
+            return false
+        }
+
+        let result: (status: Int32, output: String) = await Task.detached { () -> (Int32, String) in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/swiftc")
+            process.arguments = [
+                "-o", outputPath,
+                "-framework", "CoreGraphics",
+                "-framework", "CoreImage",
+                "-framework", "AppKit",
+                "-framework", "IOKit",
+                sourcePath
+            ]
+
+            let outputPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = outputPipe
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                let outputStr = String(data: outputData, encoding: .utf8) ?? ""
+                return (process.terminationStatus, outputStr)
+            } catch {
+                return (-1, error.localizedDescription)
+            }
+        }.value
+
+        if result.status == 0 {
+            return FileManager.default.fileExists(atPath: outputPath)
+        } else {
+            lastError = "Helper compilation failed (code \(result.status)): \(result.output)"
+            return false
+        }
+    }
+
+    public func checkInstallation() {
+        isHelperInstalled = FileManager.default.fileExists(atPath: Self.helperPath)
+        if isHelperInstalled {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            process.arguments = ["print", "system/com.sametyilmaztemel.ore.helper"]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
+            do {
+                try process.run()
+                process.waitUntilExit()
+                isHelperRunning = process.terminationStatus == 0
+            } catch {
+                isHelperRunning = false
+            }
+        } else {
+            isHelperRunning = false
+        }
+    }
+
+    public func removeHelper() async -> Bool {
+        let script = """
+        do shell script "
+            launchctl unload \(Self.plistPath) 2>/dev/null || true
+            rm -f \(Self.plistPath)
+            rm -f \(Self.helperPath)
+        " with administrator privileges
+        """
+
+        let result = await runAppleScript(script)
+        isHelperInstalled = false
+        isHelperRunning = false
+        return result
+    }
+
+    // MARK: - Privileged Operations
+
+    public func unlock(password: String) async -> Bool {
+        return await executeHelper(args: ["unlock", password])
+    }
+
+    public func isScreenLocked() async -> Bool {
+        guard let output = await executeHelperWithOutput(args: ["check"]) else { return false }
+        guard let data = output.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let locked = json["locked"] as? Bool else {
+            return false
+        }
+        return locked
+    }
+
+    public func captureDisplay() async -> Data? {
+        return await executeHelperWithData(args: ["capture"])
+    }
+
+    public func lockScreen() async -> Bool {
+        return await executeHelper(args: ["lock"])
+    }
+
+    public func moveMouse(x: Int32, y: Int32) async -> Bool {
+        return await executeHelper(args: ["mouse_move", String(x), String(y)])
+    }
+
+    public func clickMouse(button: Int32, down: Bool, x: Int32, y: Int32) async -> Bool {
+        return await executeHelper(args: ["mouse_click", String(button), down ? "1" : "0", String(x), String(y)])
+    }
+
+    public func scrollMouse(deltaX: Int32, deltaY: Int32) async -> Bool {
+        return await executeHelper(args: ["mouse_scroll", String(deltaX), String(deltaY)])
+    }
+
+    public func sendKey(keyCode: UInt16, down: Bool, flags: String = "") async -> Bool {
+        if flags.isEmpty {
+            return await executeHelper(args: ["key_event", String(keyCode), down ? "1" : "0"])
+        }
+        return await executeHelper(args: ["key_event", String(keyCode), down ? "1" : "0", flags])
+    }
+
+    // MARK: - Helper Execution (async wrappers that move blocking work off the main actor)
+
+    private func executeHelper(args: [String]) async -> Bool {
+        guard isHelperInstalled else { return false }
+
+        let status = await runProcessDetached(args: args)
+        if status < 0 {
+            lastError = "Helper execution failed"
+            return false
+        }
+        return status == 0
+    }
+
+    private func executeHelperWithOutput(args: [String]) async -> String? {
+        guard isHelperInstalled else { return nil }
+
+        let result = await runProcessWithOutputDetached(args: args)
+        return result
+    }
+
+    private func executeHelperWithData(args: [String]) async -> Data? {
+        guard isHelperInstalled else { return nil }
+
+        let result = await runProcessWithDataDetached(args: args)
+        return result
+    }
+
+    // MARK: - Detached Process Runners
+
+    /// Run a Process on a background task, return termination status (-1 on error).
+    private nonisolated func runProcessDetached(args: [String]) async -> Int32 {
+        return await Task.detached { () -> Int32 in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: Self.helperPath)
+            process.arguments = args
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                return process.terminationStatus
+            } catch {
+                return -1
+            }
+        }.value
+    }
+
+    /// Run a Process on a background task, return stdout as String (nil on error).
+    private nonisolated func runProcessWithOutputDetached(args: [String]) async -> String? {
+        return await Task.detached { () -> String? in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: Self.helperPath)
+            process.arguments = args
+
+            let outputPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = Pipe()
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                return String(data: outputData, encoding: .utf8)
+            } catch {
+                return nil
+            }
+        }.value
+    }
+
+    /// Run a Process on a background task, return stdout as Data (nil on error).
+    private nonisolated func runProcessWithDataDetached(args: [String]) async -> Data? {
+        return await Task.detached { () -> Data? in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: Self.helperPath)
+            process.arguments = args
+
+            let outputPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = Pipe()
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                return outputPipe.fileHandleForReading.readDataToEndOfFile()
+            } catch {
+                return nil
+            }
+        }.value
+    }
+
+    // MARK: - AppleScript Helper
+
+    /// Run AppleScript with admin prompt. NSAppleScript blocks the calling thread
+    /// (it shows a modal authorization dialog), so we run it via Task.detached.
+    private func runAppleScript(_ source: String) async -> Bool {
+        let result: (success: Bool, errorMsg: String?) = await Task.detached { () -> (Bool, String?) in
+            guard let appleScript = NSAppleScript(source: source) else {
+                return (false, "Failed to create AppleScript")
+            }
+
+            var errorDict: NSDictionary?
+            appleScript.executeAndReturnError(&errorDict)
+
+            if let errorDict = errorDict {
+                let number = errorDict[NSAppleScript.errorNumber] as? Int ?? -1
+                let message = errorDict[NSAppleScript.errorMessage] as? String ?? "Unknown error"
+                return (false, "AppleScript error #\(number): \(message)")
+            }
+            return (true, nil)
+        }.value
+
+        if let errorMsg = result.errorMsg {
+            self.lastError = errorMsg
+            return false
+        }
+        return result.success
+    }
+}
+
+// MARK: - XPC Service Protocol (for future use with SMJobBless)
+
+public protocol OreHelperXPCProtocol {
+    func unlockScreen(password: String, reply: @escaping (Bool, String?) -> Void)
+    func isScreenLocked(reply: @escaping (Bool) -> Void)
+    func captureDisplay(reply: @escaping (Data?, String?) -> Void)
+    func lockScreen(reply: @escaping (Bool, String?) -> Void)
+}
