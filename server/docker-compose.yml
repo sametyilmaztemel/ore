@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  signaling:
+    build:
+      context: ./signaling
+      dockerfile: Dockerfile
+    container_name: oretty-signaling
+    ports:
+      - "443:443"
+    volumes:
+      - signaling-data:/app/data
+      - ./certs:/app/certs:ro
+    env_file:
+      - ./signaling/.env
+    environment:
+      - SIGNAL_PORT=443
+      - DB_PATH=/app/data/oretty.db
+    restart: unless-stopped
+    networks:
+      - oretty-net
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: oretty-turn
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
+      - "49152-65535:49152-65535/udp"
+    volumes:
+      - ./turn/turnserver.conf:/etc/turnserver.conf:ro
+    restart: unless-stopped
+    networks:
+      - oretty-net
+
+volumes:
+  signaling-data:
+
+networks:
+  oretty-net:
+    driver: bridge
