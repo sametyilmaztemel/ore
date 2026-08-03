@@ -1,0 +1,53 @@
+name: OreMenuBar
+options:
+  bundleIdPrefix: com.sametyilmaztemel
+  deploymentTarget:
+    macOS: "15.0"
+  xcodeVersion: "26.2"
+
+settings:
+  SWIFT_VERSION: "6.2"
+  MARKETING_VERSION: "1.0.0"
+  CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  OreMenuBar:
+    type: application
+    platform: macOS
+    sources:
+      - path: OreMenuBar
+        includes:
+          - "*.swift"
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.sametyilmaztemel.ore.menubar
+      INFOPLIST_FILE: OreMenuBar/Info.plist
+      CODE_SIGN_STYLE: Automatic
+      ENABLE_HARDENED_RUNTIME: true
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      SWIFT_STRICT_CONCURRENCY: complete
+    dependencies:
+      - target: OreHelper
+        embed: true
+      - sdk: ServiceManagement.framework
+      - sdk: UserNotifications.framework
+
+  OreHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: OreHelper
+        includes:
+          - "*.swift"
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.sametyilmaztemel.ore.helper
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGNING_ALLOWED: YES
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      ENABLE_HARDENED_RUNTIME: false
+      GENERATE_INFOPLIST_FILE: true
+      INFOPLIST_FILE: OreHelper-Info.plist
+      GCC_TREAT_WARNINGS_AS_ERRORS: false
+    dependencies:
+      - sdk: CoreGraphics.framework
+      - sdk: CoreImage.framework
+      - sdk: IOKit.framework
