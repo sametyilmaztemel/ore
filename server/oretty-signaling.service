@@ -1,0 +1,19 @@
+[Unit]
+Description=Oretty Signaling Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/projects/oretty/server/signaling
+ExecStart=/home/ubuntu/projects/oretty/server/signaling/signaling
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+# Read env vars
+EnvironmentFile=/home/ubuntu/projects/oretty/server/signaling/.env
+
+[Install]
+WantedBy=multi-user.target
